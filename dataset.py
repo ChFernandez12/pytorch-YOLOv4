@@ -262,7 +262,6 @@ class Yolo_dataset(Dataset):
 
         self.truth = truth
         self.imgs = list(self.truth.keys())
-
     def __len__(self):
         return len(self.truth.keys())
 
@@ -384,6 +383,11 @@ class Yolo_dataset(Dataset):
             out_bboxes = np.concatenate(out_bboxes, axis=0)
         out_bboxes1 = np.zeros([self.cfg.boxes, 5])
         out_bboxes1[:min(out_bboxes.shape[0], self.cfg.boxes)] = out_bboxes[:min(out_bboxes.shape[0], self.cfg.boxes)]
+        if False: #CFL
+	        from tool.utils import load_class_names, plot_boxes_cv2
+	        print(out_bboxes1,'out_bboxes1')
+	        plot_boxes_cv2(out_img, out_bboxes1,  'data_ch'+str(index)+'.jpg', ['a','a','a','a','a','a','a','a','a','a','a'])
+        
         return out_img, out_bboxes1
 
     def _get_val_item(self, index):
@@ -423,11 +427,9 @@ def get_image_id(filename:str) -> int:
     >>> no = f"{int(no):04d}"
     >>> return int(lv+no)
     """
-    raise NotImplementedError("Create your own 'get_image_id' function")
     lv, no = os.path.splitext(os.path.basename(filename))[0].split("_")
-    lv = lv.replace("level", "")
-    no = f"{int(no):04d}"
-    return int(lv+no)
+
+    return int(lv)
 
 
 if __name__ == "__main__":
@@ -436,7 +438,7 @@ if __name__ == "__main__":
 
     random.seed(2020)
     np.random.seed(2020)
-    Cfg.dataset_dir = '/mnt/e/Dataset'
+    Cfg.dataset_dir = '/mnt/md0/cfernandez/AIWorkGroup/data/udacity-coco/Dataset'
     dataset = Yolo_dataset(Cfg.train_label, Cfg)
     for i in range(100):
         out_img, out_bboxes = dataset.__getitem__(i)

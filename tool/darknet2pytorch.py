@@ -264,8 +264,10 @@ class Darknet(nn.Module):
                     model.add_module('relu{0}'.format(conv_id), nn.ReLU(inplace=True))
                 elif activation == 'mish':
                     model.add_module('mish{0}'.format(conv_id), Mish())
+                elif activation == 'linear':
+                    pass
                 else:
-                    print("convalution havn't activate {}".format(activation))
+                    print("convalution has not activate {}".format(activation))
 
                 prev_filters = filters
                 out_filters.append(prev_filters)
@@ -417,6 +419,7 @@ class Darknet(nn.Module):
         self.header = torch.from_numpy(header)
         self.seen = self.header[3]
         buf = np.fromfile(fp, dtype=np.float32)
+        print(buf)
         fp.close()
 
         start = 0

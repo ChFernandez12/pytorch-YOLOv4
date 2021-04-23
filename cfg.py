@@ -12,6 +12,9 @@
 '''
 import os
 from easydict import EasyDict
+import time
+
+
 
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -19,12 +22,12 @@ _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 Cfg = EasyDict()
 
 Cfg.use_darknet_cfg = True
-Cfg.cfgfile = os.path.join(_BASE_DIR, 'cfg', 'yolov4.cfg')
+Cfg.cfgfile = os.path.join(_BASE_DIR, 'cfg', 'yolov4-tiny_11.cfg')
 
 Cfg.batch = 64
-Cfg.subdivisions = 16
-Cfg.width = 608
-Cfg.height = 608
+Cfg.subdivisions = 4 #CFL
+Cfg.width = 416
+Cfg.height = 416
 Cfg.channels = 3
 Cfg.momentum = 0.949
 Cfg.decay = 0.0005
@@ -35,17 +38,17 @@ Cfg.hue = .1
 
 Cfg.learning_rate = 0.00261
 Cfg.burn_in = 1000
-Cfg.max_batches = 500500
-Cfg.steps = [400000, 450000]
+Cfg.max_batches = 22000
+Cfg.steps = [17600,19800]
 Cfg.policy = Cfg.steps
 Cfg.scales = .1, .1
 
 Cfg.cutmix = 0
-Cfg.mosaic = 1
+Cfg.mosaic = 0
 
 Cfg.letter_box = 0
 Cfg.jitter = 0.2
-Cfg.classes = 80
+Cfg.classes = 11
 Cfg.track = 0
 Cfg.w = Cfg.width
 Cfg.h = Cfg.height
@@ -55,6 +58,7 @@ Cfg.gaussian = 0
 Cfg.boxes = 60  # box num
 Cfg.TRAIN_EPOCHS = 300
 Cfg.train_label = os.path.join(_BASE_DIR, 'data', 'train.txt')
+print(os.path.join(_BASE_DIR, 'data', 'train.txt'), 'AAAAAAAAAAAAAAAA')
 Cfg.val_label = os.path.join(_BASE_DIR, 'data' ,'val.txt')
 Cfg.TRAIN_OPTIMIZER = 'adam'
 '''
@@ -69,9 +73,11 @@ elif Cfg.cutmix:
     Cfg.mixup = 2
 elif Cfg.mosaic:
     Cfg.mixup = 3
-
+Cfg.mixup = 0	
 Cfg.checkpoints = os.path.join(_BASE_DIR, 'checkpoints')
-Cfg.TRAIN_TENSORBOARD_DIR = os.path.join(_BASE_DIR, 'log')
+
+now = time.strftime("%c")
+Cfg.TRAIN_TENSORBOARD_DIR = os.path.join(_BASE_DIR, 'log', now)
 
 Cfg.iou_type = 'iou'  # 'giou', 'diou', 'ciou'
 

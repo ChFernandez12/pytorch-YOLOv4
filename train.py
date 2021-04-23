@@ -128,28 +128,29 @@ def bboxes_iou(bboxes_a, bboxes_b, xyxy=True, GIoU=False, DIoU=False, CIoU=False
 
 
 class Yolo_loss(nn.Module):
-    def __init__(self, n_classes=80, n_anchors=3, device=None, batch=2):
+    def __init__(self, n_classes=80,img_size = 416, n_anchors=3, device=None, batch=2):
         super(Yolo_loss, self).__init__()
         self.device = device
-        self.strides = [8, 16, 32]
-        image_size = 608
+        self.strides = [32, 16]
+        #image_size = 416
+        self.img_size = img_size
         self.n_classes = n_classes
         self.n_anchors = n_anchors
 
-        self.anchors = [[12, 16], [19, 36], [40, 28], [36, 75], [76, 55], [72, 146], [142, 110], [192, 243], [459, 401]]
-        self.anch_masks = [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
+        self.anchors = [[10,14],  [23,27],  [37,58],  [81,82], [135,169],  [344,319]]
+        self.anch_masks = [[0, 1, 2], [3, 4, 5]]
         self.ignore_thre = 0.5
 
         self.masked_anchors, self.ref_anchors, self.grid_x, self.grid_y, self.anchor_w, self.anchor_h = [], [], [], [], [], []
 
-        for i in range(3):
+        for i in range(len(self.strides)):
             all_anchors_grid = [(w / self.strides[i], h / self.strides[i]) for w, h in self.anchors]
             masked_anchors = np.array([all_anchors_grid[j] for j in self.anch_masks[i]], dtype=np.float32)
             ref_anchors = np.zeros((len(all_anchors_grid), 4), dtype=np.float32)
             ref_anchors[:, 2:] = np.array(all_anchors_grid, dtype=np.float32)
             ref_anchors = torch.from_numpy(ref_anchors)
             # calculate pred - xywh obj cls
-            fsize = image_size // self.strides[i]
+            fsize = self.img_size // self.strides[i]
             grid_x = torch.arange(fsize, dtype=torch.float).repeat(batch, 3, fsize, 1).to(device)
             grid_y = torch.arange(fsize, dtype=torch.float).repeat(batch, 3, fsize, 1).permute(0, 1, 3, 2).to(device)
             anchor_w = torch.from_numpy(masked_anchors[:, 0]).repeat(batch, fsize, fsize, 1).permute(0, 3, 1, 2).to(
@@ -256,6 +257,7 @@ class Yolo_loss(nn.Module):
             # loss calculation
             output[..., 4] *= obj_mask
             output[..., np.r_[0:4, 5:n_ch]] *= tgt_mask
+
             output[..., 2:4] *= tgt_scale
 
             target[..., 4] *= obj_mask
@@ -289,6 +291,7 @@ def collate(batch):
 
 
 def train(model, device, config, epochs=5, batch_size=1, save_cp=True, log_step=20, img_scale=0.5):
+    print(config)
     train_dataset = Yolo_dataset(config.train_label, config, train=True)
     val_dataset = Yolo_dataset(config.val_label, config, train=False)
 
@@ -298,7 +301,7 @@ def train(model, device, config, epochs=5, batch_size=1, save_cp=True, log_step=
     train_loader = DataLoader(train_dataset, batch_size=config.batch // config.subdivisions, shuffle=True,
                               num_workers=8, pin_memory=True, drop_last=True, collate_fn=collate)
 
-    val_loader = DataLoader(val_dataset, batch_size=config.batch // config.subdivisions, shuffle=True, num_workers=8,
+    val_loader = DataLoader(val_dataset, batch_size=config.batch // config.subdivisions, shuffle=True, num_workers=8, 
                             pin_memory=True, drop_last=True, collate_fn=val_collate)
 
     writer = SummaryWriter(log_dir=config.TRAIN_TENSORBOARD_DIR,
@@ -323,7 +326,7 @@ def train(model, device, config, epochs=5, batch_size=1, save_cp=True, log_step=
         Optimizer:       {config.TRAIN_OPTIMIZER}
         Dataset classes: {config.classes}
         Train label path:{config.train_label}
-        Pretrained:
+        Pretrained: {config.pretrained}
     ''')
 
     # learning rate setup
@@ -358,13 +361,19 @@ def train(model, device, config, epochs=5, batch_size=1, save_cp=True, log_step=
     # scheduler = ReduceLROnPlateau(optimizer, mode='max', verbose=True, patience=6, min_lr=1e-7)
     # scheduler = CosineAnnealingWarmRestarts(optimizer, 0.001, 1e-6, 20)
 
-    save_prefix = 'Yolov4_epoch'
+    save_prefix = 'Yolov4_weighted_epoch'
     saved_models = deque()
     model.train()
+    torch.autograd.set_detect_anomaly(True)
     for epoch in range(epochs):
         # model.train()
         epoch_loss = 0
         epoch_step = 0
+
+        if False:
+            vis_loader = DataLoader(train_dataset, batch_size=1, shuffle=True, pin_memory=True, drop_last=True)
+            a = next(iter(vis_loader))
+            input('STOP')
 
         with tqdm(total=n_train, desc=f'Epoch {epoch + 1}/{epochs}', unit='img', ncols=50) as pbar:
             for i, batch in enumerate(train_loader):
@@ -377,6 +386,7 @@ def train(model, device, config, epochs=5, batch_size=1, save_cp=True, log_step=
                 bboxes = bboxes.to(device=device)
 
                 bboxes_pred = model(images)
+
                 loss, loss_xy, loss_wh, loss_obj, loss_cls, loss_l2 = criterion(bboxes_pred, bboxes)
                 # loss = loss / config.subdivisions
                 loss.backward()
@@ -472,6 +482,7 @@ def evaluate(model, data_loader, cfg, device, logger=None, **kwargs):
     coco_evaluator = CocoEvaluator(coco, iou_types = ["bbox"], bbox_fmt='coco')
 
     for images, targets in data_loader:
+
         model_input = [[cv2.resize(img, (cfg.w, cfg.h))] for img in images]
         model_input = np.concatenate(model_input, axis=0)
         model_input = model_input.transpose(0, 3, 1, 2)
@@ -537,11 +548,11 @@ def get_args(**kwargs):
                         help='Load model from a .pth file')
     parser.add_argument('-g', '--gpu', metavar='G', type=str, default='-1',
                         help='GPU', dest='gpu')
-    parser.add_argument('-dir', '--data-dir', type=str, default=None,
+    parser.add_argument('-dir', '--data-dir', type=str, default='/mnt/md0/cfernandez/AIWorkGroup/data/udacity-coco/Dataset',
                         help='dataset dir', dest='dataset_dir')
     parser.add_argument('-pretrained', type=str, default=None, help='pretrained yolov4.conv.137')
-    parser.add_argument('-classes', type=int, default=80, help='dataset classes')
-    parser.add_argument('-train_label_path', dest='train_label', type=str, default='train.txt', help="train label path")
+    parser.add_argument('-classes', type=int, default=11, help='dataset classes')
+    #parser.add_argument('-train_label_path', dest='train_label', type=str, help="train label path")
     parser.add_argument(
         '-optimizer', type=str, default='adam',
         help='training optimizer',
@@ -603,6 +614,43 @@ def _get_date_str():
     return now.strftime('%Y-%m-%d_%H-%M')
 
 
+def froze_layers(model):
+    child_counter = 0
+    '''
+    print('FROZE-----------------')
+    for child in model.children():
+        print('-------------------------------------')
+        for a,i in enumerate(child):
+            print(a,i,'a')
+
+
+    input('STOP')
+    '''
+    for module in model.children():
+        for child in module:
+            if child_counter < 35:
+                print("child ",child_counter," was frozen")
+                print(child)
+                for param in child.parameters():
+                    param.requires_grad = False
+            elif child_counter == 6:
+                children_of_child_counter = 0
+                for children_of_child in child.children():
+                    if children_of_child_counter < 1:
+                        for param in children_of_child.parameters():
+                            param.requires_grad = False
+                        print('child ', children_of_child_counter, 'of child',child_counter,' was frozen')
+                    else:
+                        print('child ', children_of_child_counter, 'of child',child_counter,' was not frozen')
+                    children_of_child_counter += 1
+
+            else:
+                print("child ",child_counter," was not frozen")
+            child_counter += 1
+        break
+
+
+
 if __name__ == "__main__":
     logging = init_logger(log_dir='log')
     cfg = get_args(**Cfg)
@@ -612,6 +660,15 @@ if __name__ == "__main__":
 
     if cfg.use_darknet_cfg:
         model = Darknet(cfg.cfgfile)
+        model.load_weights('weights/yolov4-tiny.weights')
+        model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+        params = sum([np.prod(p.size()) for p in model_parameters])
+        print(params)
+        froze_layers(model)
+        model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+        params = sum([np.prod(p.size()) for p in model_parameters])
+        print(params)
+        print('weights loaded')
     else:
         model = Yolov4(cfg.pretrained, n_classes=cfg.classes)
 

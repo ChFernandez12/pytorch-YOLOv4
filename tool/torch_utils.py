@@ -12,7 +12,6 @@ import imghdr  # get_image_size
 
 from tool import utils 
 
-
 def bbox_ious(boxes1, boxes2, x1y1x2y2=True):
     if x1y1x2y2:
         mx = torch.min(boxes1[0], boxes2[0])
@@ -94,11 +93,11 @@ def do_detect(model, img, conf_thresh, nms_thresh, use_cuda=1):
     output = model(img)
 
     t2 = time.time()
-
+    inference_time = (t2 - t1)
     print('-----------------------------------')
     print('           Preprocess : %f' % (t1 - t0))
     print('      Model Inference : %f' % (t2 - t1))
     print('-----------------------------------')
 
-    return utils.post_processing(img, conf_thresh, nms_thresh, output)
+    return utils.post_processing(img, conf_thresh, nms_thresh, output), inference_time
 
